@@ -3,26 +3,35 @@ import ctypes
 import io
 
 
+class act_t(str):
+    @staticmethod
+    def test():
+        a = act_t("fold")
+        print('act_t("fold"):', a)
+
+
 class Ptr(int):
     HEAP = {}
 
     def __init__(self, val):
-        # warning: be ware of conflict like which happened in malloc (currently turned off)
+        # warning: beware of conflict like which happened in malloc (currently turned off)
         pass
     
     def get_obj(self):
         return self.HEAP[self]
+
     def set_obj(self, obj):
         self.HEAP[self] = obj
-    obj = property(get_obj, set_obj)
+
+    o = property(get_obj, set_obj)
 
     @classmethod
-    def ref(cls, obj):
+    def p(cls, obj):
         return cls(id(obj))
     
     @classmethod
-    def register_into_heap(cls, obj):
-        cls.ref(obj).obj = obj
+    def record(cls, obj):
+        cls.p(obj).o = obj
     
     def free(self):
         del self.HEAP[self]
@@ -39,26 +48,29 @@ class Ptr(int):
         return p
     '''
 
-class Node:
-    def __init__(self, parent=Ptr(0)) -> None:
+
+class Node(object):
+    def __init__(self, parent=Ptr(0), branch=act_t("")) -> None:
         self.parent = parent
-        self.child = []
-        Ptr.register_into_heap(self)
+        self.branch = branch
+        self.child: dict[act_t, Ptr] = {}
+        Ptr.record(self)
 
         if self.parent != Ptr(0):
-            self.parent.obj.child.append(Ptr.ref(self))
+            self.parent.o.child[self.branch] = Ptr.p(self)
 
     def __repr__(self) -> str:
-        stream = io.StringIO()
-        print("parent=", self.parent, ", child=", self.child, sep="", file=stream)
-        stream_val = stream.getvalue()
-        stream.close()
-        return stream_val
+        buff = io.StringIO()
+        print("parent:", self.parent, file=buff, end=", ")
+        print("branch:", self.branch, file=buff, end=", ")
+        print("child:", self.child, file=buff)
+        return buff.getvalue()
 
 
-root = Node()
-Node(parent=Ptr.ref(root))
+if __name__ == "__main__":
+    root = Node(Ptr(0), act_t(""))
+    Node(Ptr.p(root), act_t("raise"))
 
-for p in Ptr.HEAP.keys():
-    print(p, ":", p.obj)
-    # print(ctypes.cast(p, ctypes.py_object).value)
+    for p in Ptr.HEAP.keys():
+        print(p, ": ", p.o, sep="")
+        # print(ctypes.cast(p, ctypes.py_object).value)
