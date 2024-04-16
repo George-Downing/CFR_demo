@@ -1,94 +1,102 @@
-import numpy as np
-import ctypes
-import io
+import os
+# import io
+# import numpy as np
+# import ctypes  # print(ctypes.cast(p, ctypes.py_object).value)
+# import abc
+# from typing import Union, TypeVar
+from extensive_form import *
 
-
-class act_t(str):
-    @staticmethod
-    def test():
-        a = act_t("fold")
-        print('act_t("fold"):', a)
-
-
-class Node(object):
-    def __init__(self, parent, branch) -> None:
-        self.parent: NodePtr = parent
-        self.branch: act_t = branch
-        self.child: dict[act_t, NodePtr] = {}
-
-        NodePtr.HEAP[self.p] = self
-        if self.parent != NodePtr(0):
-            self.parent.o.child[self.branch] = self.p
-
-    def h(self) -> list[act_t]:
-        p = self.p
-        y: list[act_t] = []
-        while p.o.parent != NodePtr(0):
-            y.append(p.o.branch)
-            p = p.o.parent
-        y.reverse()
-        return y
-
-    def __call__(self, acts) -> "Node":
-        p = self.p
-        for a in acts:
-            if a in p.o.child.keys():
-                p = p.o.child[a]
-            else:
-                p = self.p
-                print("Warning: invalid action sequence, nothing will take effect.")
-                break
-        return p.o
-
-    def __repr__(self) -> str:
-        buff = io.StringIO()
-        print("h:", self.h(), file=buff, end=", ")
-        print("act:", *self.child.keys(), file=buff, end="")
-        return buff.getvalue()
-
-    def get_p(self) -> "NodePtr":
-        return NodePtr.p(self)
-    p = property(get_p)
-
-
-class NodePtr(int):
-    HEAP: dict["NodePtr", Node] = {}
-
-    def __init__(self, val) -> None:
-        # warning: beware of conflict like which happened in malloc (currently turned off)
-        pass
-
-    def get_o(self) -> Node:
-        return self.HEAP[self]
-
-    def set_o(self, o) -> None:
-        self.HEAP[self] = o
-
-    o = property(get_o, set_o)
-
-    @classmethod
-    def p(cls, o) -> "NodePtr":
-        return cls(id(o))
-
-    @classmethod
-    def record(cls, o) -> None:
-        cls.p(o).o = o
-
-    def free(self) -> None:
-        del self.HEAP[self]
-
-    def __repr__(self) -> str:
-        return str(self.o.h())
+PRINT_OUT = "print_out"
 
 
 if __name__ == "__main__":
-    R = [0, 0]
-    root = Node(NodePtr(0), "")
-    Node(root.p, "R")
-    Node(root.p, "C")
-    Node(root.p, "F")
+    np.set_printoptions(precision=4, suppress=True)
 
-    Node(root(["R"]).p, "R")
-    for p in NodePtr.HEAP.keys():
-        print(p.o)
-        # print(ctypes.cast(p, ctypes.py_object).value)
+    # higher level
+    A, B, LUCK = player_t("A"), player_t("B"), player_t("LUCK")
+    true_root: NodePtr = Node(NodePtr(0), act_t("N/A")).p
+    layers: list[list[NodePtr]] = [[true_root]]
+    info_collect: dict[player_t, dict[str, InfoSetPtr]] = {A: {}, B: {}, LUCK: {}}
+    act_map: dict[player_t, dict[InfoSetPtr, list[act_t]]] = {A: {}, B: {}, LUCK: {}}
+    sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}, LUCK: {}}
+
+    # 0->1->2->3: player="LUCK", (EQUIVALENT to a SINGLE composite step)
+    # InfoSets:
+    n = true_root
+    I = InfoSet(LUCK, "-".join(n.o.h())).p
+    I.o.append(n)
+    n.o.I = I
+    info_collect[LUCK][I.o.observation] = I
+    act_map[LUCK][I] = [act_t(c) for c in ["J1", "J2", "Q1", "Q2", "K1", "K2"]]
+    sigma[LUCK][I] = np.ones([len(act_map[LUCK][I])], dtype=float) / len(act_map[LUCK][I])
+    # LUCK's play
+    for l in range(3):
+        # Nodes:
+        layers.append([])
+        for pa in layers[-2]:
+            for a in act_map[LUCK][pa.o.I]:
+                ch = Node(pa, a).p
+                ch.o.parent.o.child[ch.o.branch] = ch
+                layers[-1].append(ch)
+        if l == 2:
+            break
+        # InfoSets:
+        for n in layers[-1]:
+            I = InfoSet(LUCK, "-".join(n.o.h())).p
+            I.o.append(n)  # for loop omitted because of singleton
+            n.o.I = I  # for loop omitted because of singleton
+            info_collect[LUCK][I.o.observation] = I
+            act_map[LUCK][n.o.I] = [b for b in act_map[LUCK][n.o.parent.o.I] if b != n.o.branch]
+            sigma[LUCK][I] = np.ones([len(act_map[LUCK][I])], dtype=float) / len(act_map[LUCK][I])
+
+    betting_round_layout = [
+        [([], ["r", "c"])],
+        [(["r"], ["f", "r", "c"]), (["c"], ["r", "c"])],
+        [(["r", "r"], ["f", "c"]), (["c", "r"], ["f", "r", "c"])],
+        [(["c", "r", "r"], ["f", "c"])]
+    ]
+    many_roots = layers[-1]
+    many_info_roots: dict[player_t, list[str]] = {A: ["J??", "Q??", "K??"], B: ["?J?", "?Q?", "?K?"]}
+    round2_roots = []
+    round1_leaves = []
+
+    for l in range(len(betting_round_layout)):
+        layers.append([])
+        for pa, acts in betting_round_layout[l]:
+            acts = act_t.cast(acts)
+            for r in many_roots:
+                for a in acts:
+                    ch = Node(r.o(act_t.cast(pa)), a).p
+                    ch.o.parent.o.child[ch.o.branch] = ch
+                    layers[-1].append(ch)
+            player_i = A if l % 2 == 0 else B
+            for info_r in many_info_roots[player_i]:
+                obs = info_r + "".join(pa)
+                I = InfoSet(player_i, obs).p
+                info_collect[player_i][I.o.observation] = I
+                act_map[player_i][I] = acts
+    for r in many_roots:
+        for n in [r.o(["r", "c"]), r.o(["c", "c"]), r.o(["r", "r", "c"]), r.o(["c", "r", "c"]), r.o(["c", "r", "r", "c"])]:
+            round2_roots.append(n)
+        for n in [r.o(["r", "f"]), r.o(["r", "r", "f"]), r.o(["c", "r", "f"]), r.o(["c", "r", "r", "f"])]:
+            round1_leaves.append(n)
+
+    with open(os.path.join(PRINT_OUT, "nodes.txt"), "w") as f:
+        for l in range(len(layers)):
+            for n in layers[l]:
+                print(n, file=f)
+    with open(os.path.join(PRINT_OUT, "many_roots.txt"), "w") as f:
+        for n in many_roots:
+            print(n, file=f)
+    with open(os.path.join(PRINT_OUT, "info_collect.txt"), "w") as f:
+        for player_i in [LUCK, A, B]:
+            for I in info_collect[player_i]:
+                print(I, file=f)
+    with open(os.path.join(PRINT_OUT, "act_map.txt"), "w") as f:
+        for player_i in [LUCK, A, B]:
+            for act in act_map[player_i]:
+                print(act, file=f)
+    with open(os.path.join(PRINT_OUT, "sigma.txt"), "w") as f:
+        for player_i in [LUCK, A, B]:
+            for vec in sigma[player_i]:
+                print(vec, file=f)
