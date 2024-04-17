@@ -4,6 +4,7 @@ import os
 # import ctypes  # print(ctypes.cast(p, ctypes.py_object).value)
 # import abc
 # from typing import Union, TypeVar
+import extensive_form
 from extensive_form import *
 
 PRINT_OUT = "print_out"
@@ -57,29 +58,41 @@ if __name__ == "__main__":
     ]
     many_roots = layers[-1]
     many_info_roots: dict[player_t, list[str]] = {A: ["J??", "Q??", "K??"], B: ["?J?", "?Q?", "?K?"]}
-    round2_roots = []
     round1_leaves = []
+    round2_roots = []
 
     for l in range(len(betting_round_layout)):
         layers.append([])
         for pa, acts in betting_round_layout[l]:
             acts = act_t.cast(acts)
-            for r in many_roots:
-                for a in acts:
-                    ch = Node(r.o(act_t.cast(pa)), a).p
-                    ch.o.parent.o.child[ch.o.branch] = ch
-                    layers[-1].append(ch)
             player_i = A if l % 2 == 0 else B
             for info_r in many_info_roots[player_i]:
                 obs = info_r + "".join(pa)
                 I = InfoSet(player_i, obs).p
                 info_collect[player_i][I.o.observation] = I
                 act_map[player_i][I] = acts
+                sigma[player_i][I] = extensive_form.rand_sig_numpy_ndarray(len(act_map[player_i][I]))
+            for r in many_roots:
+                n = r.o(act_t.cast(pa))
+                h = n.o.h()
+                if player_i == A:
+                    obs = h[0][0] + "?" + "?" + "".join(h[3:])
+                    I = info_collect[A][obs]
+                else:
+                    obs = "?" + h[1][0] + "?" + "".join(h[3:])
+                    I = info_collect[B][obs]
+                I.o.append(n)
+                n.o.I = I
+                for a in acts:
+                    ch = Node(n, a).p
+                    ch.o.parent.o.child[ch.o.branch] = ch
+                    layers[-1].append(ch)
+
     for r in many_roots:
-        for n in [r.o(["r", "c"]), r.o(["c", "c"]), r.o(["r", "r", "c"]), r.o(["c", "r", "c"]), r.o(["c", "r", "r", "c"])]:
-            round2_roots.append(n)
         for n in [r.o(["r", "f"]), r.o(["r", "r", "f"]), r.o(["c", "r", "f"]), r.o(["c", "r", "r", "f"])]:
             round1_leaves.append(n)
+        for n in [r.o(["r", "c"]), r.o(["c", "c"]), r.o(["r", "r", "c"]), r.o(["c", "r", "c"]), r.o(["c", "r", "r", "c"])]:
+            round2_roots.append(n)
 
     with open(os.path.join(PRINT_OUT, "nodes.txt"), "w") as f:
         for l in range(len(layers)):
@@ -91,12 +104,12 @@ if __name__ == "__main__":
     with open(os.path.join(PRINT_OUT, "info_collect.txt"), "w") as f:
         for player_i in [LUCK, A, B]:
             for I in info_collect[player_i]:
-                print(I, file=f)
+                print(I, ": ", info_collect[player_i][I], file=f, sep="")
     with open(os.path.join(PRINT_OUT, "act_map.txt"), "w") as f:
         for player_i in [LUCK, A, B]:
-            for act in act_map[player_i]:
-                print(act, file=f)
+            for I in act_map[player_i]:
+                print(I, ": ", act_map[player_i][I], file=f, sep="")
     with open(os.path.join(PRINT_OUT, "sigma.txt"), "w") as f:
         for player_i in [LUCK, A, B]:
-            for vec in sigma[player_i]:
-                print(vec, file=f)
+            for I in sigma[player_i]:
+                print(I, ": ", sigma[player_i][I], file=f, sep="")
