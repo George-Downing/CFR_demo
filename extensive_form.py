@@ -1,5 +1,8 @@
 import io
 import numpy as np
+# import ctypes  # print(ctypes.cast(p, ctypes.py_object).value)
+# import abc
+# from typing import Union, TypeVar
 
 
 class act_t(str):
@@ -22,6 +25,7 @@ class player_t(str):  # -1(stochastic), 0, 1, ...
 
 class Node(object):
     HEAP: dict["NodePtr", "Node"] = {}
+    roots: list["NodePtr"] = []
 
     def __init__(self, parent: "NodePtr", branch: act_t) -> None:
         self.HEAP[self.p] = self
@@ -58,6 +62,9 @@ class Node(object):
         print(self.h(), file=buff, end="")
         return buff.getvalue()
 
+    def print_pro(self) -> str:
+        pass
+
 
 class NodePtr(int):
     @property
@@ -93,7 +100,8 @@ class InfoSet(list[NodePtr]):
 
     def __repr__(self) -> str:
         buff = io.StringIO()
-        print("{obs=", self.observation, file=buff, end=", ", sep="")
+        print("{P=", self.P, file=buff, end=", ", sep="")
+        print("obs=", self.observation, file=buff, end=", ", sep="")
         print("N=", len(self), file=buff, end="}", sep="")
         return buff.getvalue()
 
@@ -119,7 +127,7 @@ class InfoSetPtr(int):
         return super(self.__class__, self).__repr__() + "->" + self.o.__repr__()
 
 
-def rand_sig_numpy_ndarray(N: int) -> np.ndarray:
+def rand_sig(N: int) -> np.ndarray:
     val = np.random.rand(N - 1)
     val.sort()
     p = np.concatenate([val, np.array([1.0])], axis=0)
