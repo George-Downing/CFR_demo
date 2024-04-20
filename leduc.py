@@ -2,7 +2,8 @@ import os
 import time
 import pickle
 import numpy as np
-from extensive_form import player_t, act_t, Node, NodePtr, InfoSet, InfoSetPtr  # , rand_sig
+
+from extensive_form import player_t, act_t, Node, NodePtr, InfoSet, InfoSetPtr, rand_sig
 
 PRINT_OUT = "print_out"
 
@@ -39,8 +40,6 @@ def create_tree():
     node_layers: list[list[NodePtr]] = [[true_root]]
     info_collect: dict[player_t, dict[str, InfoSetPtr]] = {A: {}, B: {}, LUCK: {}}
     act_map: dict[player_t, dict[InfoSetPtr, list[act_t]]] = {A: {}, B: {}, LUCK: {}}
-    # sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}, LUCK: {}}
-    # time_start = time.time()
 
     # 0->1->2->3: player="LUCK", (EQUIVALENT to a SINGLE composite step)
     for n in node_layers[-1]:
@@ -64,14 +63,12 @@ def create_tree():
             n.o.I = I
             info_collect[LUCK][I.o.observation] = I
             act_map[LUCK][n.o.I] = [b for b in act_map[LUCK][n.o.parent.o.I] if b != n.o.branch]
-            # sigma[LUCK][I] = np.ones([len(act_map[LUCK][I])], dtype=float) / len(act_map[LUCK][I])
-    # print(time.time() - time_start, "LUCK")
 
     # 3->4->5->6->7, 7->8->9->10->11, player="A"/"B"
     many_round1_roots: list[NodePtr] = node_layers[-1]
     many_round2_roots: list[NodePtr] = []
     leaves: list[NodePtr] = []
-
+    # round 1
     for l in range(len(Leduc.round_template)):
         node_layers.append([])
         for pa, acts in Leduc.round_template[l]:
@@ -82,7 +79,6 @@ def create_tree():
                 I = InfoSet(player_i, obs).p
                 info_collect[player_i][I.o.observation] = I
                 act_map[player_i][I] = acts
-                # sigma[player_i][I] = rand_sig(len(act))
             for r in many_round1_roots:  # diff
                 n = r.o(act_t.cast(pa))
                 h = n.o.h()
@@ -99,8 +95,7 @@ def create_tree():
             leaves.append(n)
         for n in [r.o(c) for c in Leduc.calls_template]:
             many_round2_roots.append(n)  # diff
-    # print(time.time() - time_start, "round 1")
-
+    # round 2
     for l in range(len(Leduc.round_template)):
         node_layers.append([])
         for pa, acts in Leduc.round_template[l]:
@@ -111,7 +106,6 @@ def create_tree():
                 I = InfoSet(player_i, obs).p
                 info_collect[player_i][I.o.observation] = I
                 act_map[player_i][I] = acts
-                # sigma[player_i][I] = rand_sig(len(act))
             for r in many_round2_roots:  # diff
                 n = r.o(act_t.cast(pa))
                 h = n.o.h()
@@ -128,8 +122,13 @@ def create_tree():
             leaves.append(n)
         for n in [r.o(c) for c in Leduc.calls_template]:
             leaves.append(n)  # diff
-    # print(time.time() - time_start, "round 2")
 
+    return true_root, node_layers, many_round1_roots, many_round2_roots, leaves, info_collect, act_map
+
+
+if __name__ == "__main__":
+    A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
+    true_root, node_layers, many_round1_roots, many_round2_roots, leaves, info_collect, act_map = create_tree()
     np.set_printoptions(precision=4, suppress=True)
     with open(os.path.join(PRINT_OUT, "node_layers.txt"), "w") as f:
         for l in node_layers:
@@ -138,11 +137,11 @@ def create_tree():
     with open(os.path.join(PRINT_OUT, "many_round1_roots.txt"), "w") as f:
         for n in many_round1_roots:
             print(n, file=f)
-    with open(os.path.join(PRINT_OUT, "leaves.txt"), "w") as f:
-        for n in leaves:
-            print(n, file=f)
     with open(os.path.join(PRINT_OUT, "many_round2_roots.txt"), "w") as f:
         for n in many_round2_roots:
+            print(n, file=f)
+    with open(os.path.join(PRINT_OUT, "leaves.txt"), "w") as f:
+        for n in leaves:
             print(n, file=f)
     with open(os.path.join(PRINT_OUT, "info_collect.txt"), "w") as f:
         for player_i in [LUCK, A, B]:
@@ -152,18 +151,48 @@ def create_tree():
         for player_i in [LUCK, A, B]:
             for I in act_map[player_i]:
                 print(I, ": ", act_map[player_i][I], file=f, sep="")
-    '''
+
+    sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}, LUCK: {}}
+    for obs in info_collect[LUCK]:
+        I = info_collect[LUCK][obs]
+        act = act_map[LUCK][I]
+        sigma[LUCK][I] = np.ones([len(act)])/len(act)
+    for player_i in [A, B]:
+        for obs in info_collect[player_i]:
+            I = info_collect[player_i][obs]
+            act = act_map[player_i][I]
+            sigma[player_i][I] = rand_sig(len(act))
     with open(os.path.join(PRINT_OUT, "sigma.txt"), "w") as f:
         for player_i in [LUCK, A, B]:
             for I in sigma[player_i]:
                 print(I, ": ", sigma[player_i][I], file=f, sep="")
-    '''
-    # print(time.time() - time_start, "write")
-    return true_root, node_layers, many_round1_roots, many_round2_roots, leaves, info_collect, act_map
 
-    # save the tree to file
+    pi: dict[NodePtr, float] = {true_root: 1.0}
+    for l in node_layers[0:3]:
+        for n in l:
+            act = act_map[LUCK][n.o.I]
+            for i, a in enumerate(act):
+                pi[n.o.child[a]] = pi[n] * sigma[LUCK][n.o.I][i]
+    for l in range(len(Leduc.round_template)):
+        for pa, act in Leduc.round_template[l]:
+            player_i = A if l % 2 == 0 else B
+            for r in many_round1_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    for l in range(len(Leduc.round_template)):
+        for pa, act in Leduc.round_template[l]:
+            player_i = A if l % 2 == 0 else B
+            for r in many_round2_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    with open(os.path.join(PRINT_OUT, "pi.txt"), "w") as f:
+        for l in node_layers:
+            for n in l:
+                print(n, pi[n], file=f)
 
+    cfv: dict[NodePtr, np.ndarray] = {}
+    # for leaves:
 
-if __name__ == "__main__":
-    true_root, node_layers, many_round1_roots, many_round2_roots, leaves, info_collect, act_map = create_tree()
-    print(true_root)
+    # for other nodes:
