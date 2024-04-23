@@ -182,7 +182,7 @@ if __name__ == "__main__":
     TIME["print"] = time.time() - time_start
 
     # sigma init
-    sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}, LUCK: {}}
+    sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
     for obs in info_collect[LUCK]:
         I = info_collect[LUCK][obs]
         act = act_map[LUCK][I]
