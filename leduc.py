@@ -299,8 +299,8 @@ if __name__ == "__main__":
     # pi_refresh:
     for many_roots in [many_round1_roots, many_round2_roots]:
         for l in range(len(Leduc.round_template)):
+            player_i = A if l % 2 == 0 else B
             for pa, act in Leduc.round_template[l]:
-                player_i = A if l % 2 == 0 else B
                 for r in many_roots:
                     n = r.o(pa)
                     for i, a in enumerate(act):
