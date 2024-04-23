@@ -150,6 +150,15 @@ if __name__ == "__main__":
 
     A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
     true_root, node_layers, many_round1_roots, many_round2_roots, leaves, info_collect, act_map = create_tree()
+    ante: dict[NodePtr, np.ndarray] = {}
+    for r in many_round1_roots:
+        ante[r] = np.array([1, 1], dtype=float)
+    for r in many_round1_roots:
+        for h, m in Leduc.added_money:
+            ante[r.o(h)] = ante[r] + 2 * m
+    for r in many_round2_roots:
+        for h, m in Leduc.added_money:
+            ante[r.o(h)] = ante[r] + 4 * m
     # node_layers: [1, 6, 30, 120, 240, 600, 600, 240 (then 120 quited, and 480 joined), 1200, 3000, 3000, 1200]
     # many_round1_roots: 120
     # many_round2_roots: 600 = 120*5
@@ -179,9 +188,9 @@ if __name__ == "__main__":
         for player_i in info_collect:
             for I in act_map[player_i]:
                 print(I, ": ", act_map[player_i][I], file=f, sep="")
-    TIME["print"] = time.time() - time_start
+    TIME["print_leduc"] = time.time() - time_start
 
-    # sigma init
+    # sigma_init (rand_sig):
     sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
     for obs in info_collect[LUCK]:
         I = info_collect[LUCK][obs]
@@ -192,60 +201,28 @@ if __name__ == "__main__":
             I = info_collect[player_i][obs]
             act = act_map[player_i][I]
             sigma[player_i][I] = rand_sig(len(act))
-    with open(os.path.join(PRINT_OUT, "sigma.txt"), "w") as f:
-        for player_i in [LUCK, A, B]:
-            for I in sigma[player_i]:
-                print(I, ": ", sigma[player_i][I], file=f, sep="")
-    TIME["sigma"] = time.time() - time_start
+    TIME["sigma_init"] = time.time() - time_start
 
-    # pi_init
+    # pi_init (placeholder + luck):
     pi: dict[NodePtr, np.ndarray] = {true_root: np.array(1.0)}
+    # placeholder
     for l in node_layers:
         for n in l:
             pi[n] = np.array(1.0)
+    # luck's fixed mechanism
     for l in node_layers[0:3]:
         for n in l:
             act = act_map[LUCK][n.o.I]
             for i, a in enumerate(act):
                 pi[n.o.child[a]] = pi[n] * sigma[LUCK][n.o.I][i]
-    # pi_refresh
-    for l in range(len(Leduc.round_template)):
-        for pa, act in Leduc.round_template[l]:
-            player_i = A if l % 2 == 0 else B
-            for r in many_round1_roots:
-                n = r.o(pa)
-                for i, a in enumerate(act):
-                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
-    for l in range(len(Leduc.round_template)):
-        for pa, act in Leduc.round_template[l]:
-            player_i = A if l % 2 == 0 else B
-            for r in many_round2_roots:
-                n = r.o(pa)
-                for i, a in enumerate(act):
-                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
-    # '''
-    with open(os.path.join(PRINT_OUT, "pi.txt"), "w") as f:
-        for l in node_layers:
-            for n in l:
-                print(n, pi[n], file=f)
-    # '''
-    TIME["pi"] = time.time() - time_start
+    TIME["pi_init"] = time.time() - time_start
 
-    ante: dict[NodePtr, np.ndarray] = {}
-    for r in many_round1_roots:
-        ante[r] = np.array([1, 1], dtype=float)
-    for r in many_round1_roots:
-        for h, m in Leduc.added_money:
-            ante[r.o(h)] = ante[r] + 2 * m
-    for r in many_round2_roots:
-        for h, m in Leduc.added_money:
-            ante[r.o(h)] = ante[r] + 4 * m
-
+    # cfv_init (placeholder + set leaf nodes):
     cfv: dict[NodePtr, np.ndarray] = {}
+    # placeholder
     for l in node_layers:
         for n in l:
             cfv[n] = np.array([0.0, 0.0], dtype=float)
-    # FOR LEAVES: init
     # round-1, fold leaves
     for r in many_round1_roots:
         for seq in Leduc.folds_template:
@@ -290,19 +267,58 @@ if __name__ == "__main__":
                 cfv[leaf] = np.array([-1, 1]) * ante[leaf][0] - ante[leaf] * 0.05
             elif winner == "/":
                 cfv[leaf] = -ante[leaf] * 0.05
-    # FOR OTHER NODES: refresh
+    TIME["cfv_init"] = time.time() - time_start
 
-    # '''
+    # cfr_init (placeholder):
+    cfr: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+    for player_i in cfr:
+        for obs in info_collect[player_i]:
+            I = info_collect[player_i][obs]
+            act = act_map[player_i][I]
+            cfr[player_i][I] = rand_sig(len(act)) * 0.0
+    TIME["cfr_init"] = time.time() - time_start
+
+    with open(os.path.join(PRINT_OUT, "sigma.txt"), "w") as f:
+        for player_i in sigma:
+            for I in sigma[player_i]:
+                print(I, ": ", sigma[player_i][I], file=f, sep="")
+    with open(os.path.join(PRINT_OUT, "pi.txt"), "w") as f:
+        for l in node_layers:
+            for n in l:
+                print(n, pi[n], file=f)
     with open(os.path.join(PRINT_OUT, "cfv.txt"), "w") as f:
         for n in cfv:
             print(n, cfv[n], file=f)
-    # '''
-    TIME["cfv"] = time.time() - time_start
+    with open(os.path.join(PRINT_OUT, "cfr.txt"), "w") as f:
+        for player_i in cfr:
+            for I in cfr[player_i]:
+                print(I, ": ", cfr[player_i][I], file=f, sep="")
+    TIME["print_sigma+pi+cfv(INIT)"] = time.time() - time_start
 
-    plt.plot(TIME.values())
+    # ITERATIONS:
+    # pi_refresh:
+    for l in range(len(Leduc.round_template)):
+        for pa, act in Leduc.round_template[l]:
+            player_i = A if l % 2 == 0 else B
+            for r in many_round1_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    for l in range(len(Leduc.round_template)):
+        for pa, act in Leduc.round_template[l]:
+            player_i = A if l % 2 == 0 else B
+            for r in many_round2_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    # cfv_refresh (non-leaf-nodes):
+
+    # cfr_algorithm
+
+    # time complexity and performance
+    # plt.plot(TIME.values())
     i = 0
     for key in TIME.keys():
-        plt.text(i-0.5, TIME[key], key, horizontalalignment="center")
+        print(key, TIME[key])
+        # plt.text(i-0.5, TIME[key], key, horizontalalignment="center")
         i += 1
-    # plt.show()
-
