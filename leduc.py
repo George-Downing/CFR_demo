@@ -297,16 +297,23 @@ if __name__ == "__main__":
 
     # ITERATIONS:
     # pi_refresh:
-    for many_roots in [many_round1_roots, many_round2_roots]:
-        for l in range(len(Leduc.round_template)):
-            player_i = A if l % 2 == 0 else B
-            for pa, act in Leduc.round_template[l]:
-                for r in many_roots:
-                    n = r.o(pa)
-                    for i, a in enumerate(act):
-                        pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    for l in range(len(Leduc.round_template)):
+        player_i = A if l % 2 == 0 else B
+        for pa, act in Leduc.round_template[l]:
+            for r in many_round1_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
+    for l in range(len(Leduc.round_template)):
+        player_i = A if l % 2 == 0 else B
+        for pa, act in Leduc.round_template[l]:
+            for r in many_round2_roots:
+                n = r.o(pa)
+                for i, a in enumerate(act):
+                    pi[n.o.child[a]] = pi[n] * sigma[player_i][n.o.I][i]
 
     # cfv_refresh (non-leaf-nodes):
+    # parent actively collect the cfv (not child contribute onward)
 
     # cfr_algorithm
 
