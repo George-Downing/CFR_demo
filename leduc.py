@@ -204,8 +204,8 @@ if __name__ == "__main__":
     A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
     node_layers, true_root, r1_roots, r2_roots, leaves, info_collect, act_map = create_tree()
     ante = Leduc.ante
-    # node_layers: NEW: [1, 3,  9,  24,  48, 120, 120,  48 (then  24 quited, and  96 joined),  240,  600,  600,  240]
-    # node_layers: OLD: [1, 6, 30, 120, 240, 600, 600, 240 (then 120 quited, and 480 joined), 1200, 3000, 3000, 1200]
+    # node_layers: NEW: [1, 3, 9, 24=27-3, 48, 120, 120,  48 (then  24 quited, and  96 joined),  240,  600,  600,  240]
+    # node_layers: OLD: [1, 6, 30,  120,  240, 600, 600, 240 (then 120 quited, and 480 joined), 1200, 3000, 3000, 1200]
     # many_round1_roots: NEW: 24; OLD: 120
     # many_round2_roots: NEW: 120 = 24*5; OLD: 600 = 120*5
     # round1_leaves: NEW: 96 = 24*4; OLD: 480 = 120*4
