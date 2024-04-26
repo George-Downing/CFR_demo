@@ -195,6 +195,7 @@ class Leduc(object):
         # exploitability (placeholder)
 
         A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
+        ante = self._ante
 
         sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
         for obs in self.info_collect[LUCK]:
@@ -222,7 +223,7 @@ class Leduc(object):
         for l in self.node_layers:
             for n in l:
                 cfv[n] = np.array([0.0, 0.0], dtype=float)
-        ante = self._ante
+
         # round-1, fold leaves
         for r in self.round1_roots:
             for seq in Leduc.folds_template:
