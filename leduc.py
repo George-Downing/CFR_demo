@@ -6,8 +6,6 @@ import pickle
 import numpy as np
 from extensive_form import player_t, act_t, Node, NodePtr, InfoSet, InfoSetPtr, rand_sig
 
-PRINT_OUT = "print_out"
-
 '''
 ABSOLUTE-STABLE, candidates:
     absolute-stable/const invariant readonly
@@ -58,8 +56,10 @@ class Leduc(object):
         round1_leaves: 96 = 24*4, round2_leaves: 1080 = 24*5*(4+5)
         """
 
-        LUCK, A, B = Leduc.LUCK, Leduc.A, Leduc.B
+        self.PRINT = "stdout"
+        self.DATA = "data"
 
+        LUCK, A, B = Leduc.LUCK, Leduc.A, Leduc.B
         self.true_root: NodePtr = Node(NodePtr(0), act_t("CCCCCCCC")).p
         Node.roots.append(self.true_root)
         self.true_root.o.I = InfoSet(LUCK, "").p
@@ -167,24 +167,24 @@ class Leduc(object):
 
     def print_structures(self):
         np.set_printoptions(precision=4, suppress=True)
-        with open(os.path.join(PRINT_OUT, "game.node_layers.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.node_layers.txt"), "w") as f:
             for l in self.node_layers:
                 for n in l:
                     print(n, file=f)
-        with open(os.path.join(PRINT_OUT, "game.round1_roots.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.round1_roots.txt"), "w") as f:
             for n in self.round1_roots:
                 print(n, file=f)
-        with open(os.path.join(PRINT_OUT, "game.round2_roots.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.round2_roots.txt"), "w") as f:
             for n in self.round2_roots:
                 print(n, file=f)
-        with open(os.path.join(PRINT_OUT, "game.leaves.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.leaves.txt"), "w") as f:
             for n in self.leaves:
                 print(n, file=f)
-        with open(os.path.join(PRINT_OUT, "game.info_collect.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.info_collect.txt"), "w") as f:
             for player_i in self.info_collect:
                 for I in self.info_collect[player_i]:
                     print(I, ": ", self.info_collect[player_i][I], file=f, sep="")
-        with open(os.path.join(PRINT_OUT, "game.act_map.txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "game.act_map.txt"), "w") as f:
             for player_i in self.info_collect:
                 for I in self.act[player_i]:
                     print(I, ": ", self.act[player_i][I], file=f, sep="")
@@ -295,26 +295,26 @@ class Leduc(object):
 
     def print_iters(self, t, cfR, sigma, pi, cfv, cfr, ep):
         np.set_printoptions(precision=4, suppress=True)
-        with open(os.path.join(PRINT_OUT, "cfR_sum_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "cfR_sum_" + str(t) + ".txt"), "w") as f:
             for P_name in cfR:
                 for I in cfR[P_name]:
                     print(I, ": ", cfR[P_name][I], file=f, sep="")
-        with open(os.path.join(PRINT_OUT, "sigma_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "sigma_" + str(t) + ".txt"), "w") as f:
             for P_name in sigma:
                 for I in sigma[P_name]:
                     print(I, ": ", sigma[P_name][I], file=f, sep="")
-        with open(os.path.join(PRINT_OUT, "pi_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "pi_" + str(t) + ".txt"), "w") as f:
             for l in self.node_layers:
                 for n in l:
                     print(n, pi[n], file=f)
-        with open(os.path.join(PRINT_OUT, "cfv_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "cfv_" + str(t) + ".txt"), "w") as f:
             for n in cfv:
                 print(n, cfv[n], file=f)
-        with open(os.path.join(PRINT_OUT, "cfr_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "cfr_" + str(t) + ".txt"), "w") as f:
             for P_name in cfr:
                 for I in cfr[P_name]:
                     print(I, ": ", cfr[P_name][I], file=f, sep="")
-        with open(os.path.join(PRINT_OUT, "ep_" + str(t) + ".txt"), "w") as f:
+        with open(os.path.join(self.PRINT, "ep_" + str(t) + ".txt"), "w") as f:
             for P_name in ep:
                 for I in ep[P_name]:
                     print(I, ": ", ep[P_name][I], file=f, sep="")
@@ -394,29 +394,118 @@ class Leduc(object):
 def main():
     TIME = {}
     time_start = time.time()
-    TIME["start"] = time.time() - time_start
-    print("start", TIME["start"])
+    TIME["timer_start"] = time.time() - time_start
+    print("timer_start", TIME["timer_start"])
 
     game = Leduc()
     game.print_structures()
-    TIME["leduc"] = time.time() - time_start
-    print("leduc", TIME["leduc"])
+    TIME["build"] = time.time() - time_start
+    print("build", TIME["build"])
 
     cfR, sigma, pi, cfv, cfr, ep = game.strategy_init()
     game.print_iters(0, cfR, sigma, pi, cfv, cfr, ep)
-    TIME["init"] = time.time() - time_start
-    print("init", TIME["init"])
+    TIME["val_init"] = time.time() - time_start
+    print("val_init", TIME["val_init"])
 
-    # ITERATIONS:
-    for t in range(501):
-        flag_print = True if t % 20 == 0 else False
+    FLAG_LOAD = True
+    FLAG_LOAD_SUCCESS = False
+    if FLAG_LOAD:
+        try:
+            with open(os.path.join(game.DATA, "game.true_root.pkl"), "rb") as f:
+                game_true_root_old: NodePtr = pickle.load(f)
+            with open(os.path.join(game.DATA, "Node.HEAP.pkl"), "rb") as f:
+                Node_HEAP_old: dict[NodePtr, Node] = pickle.load(f)
+            with open(os.path.join(game.DATA, "game.info_collect.pkl"), "rb") as f:
+                game_info_collect_old: dict[player_t, dict[str, InfoSetPtr]] = pickle.load(f)
+
+            with open(os.path.join(game.DATA, "cfR_sum.pkl"), "rb") as f:
+                cfR_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+            with open(os.path.join(game.DATA, "sigma.pkl"), "rb") as f:
+                sigma_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+            with open(os.path.join(game.DATA, "pi.pkl"), "rb") as f:
+                pi_old: dict[NodePtr, np.ndarray] = pickle.load(f)
+            with open(os.path.join(game.DATA, "cfv.pkl"), "rb") as f:
+                cfv_old: dict[NodePtr, np.ndarray] = pickle.load(f)
+            with open(os.path.join(game.DATA, "cfr.pkl"), "rb") as f:
+                cfr_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+            with open(os.path.join(game.DATA, "ep.pkl"), "rb") as f:
+                ep_old: dict[player_t, dict[InfoSetPtr, float]] = pickle.load(f)
+            FLAG_LOAD_SUCCESS = True
+        except Exception as e:
+            print("Structure/iteration data corrupted, no overwrite happened yet.")
+            FLAG_LOAD_SUCCESS = False
+
+    FLAG_REVERSE_SUCCESS = False
+    FLAG_TRANSCRIPT_SUCCESS = False
+    if FLAG_LOAD_SUCCESS:
+        NodePtr_reverse: dict[NodePtr, NodePtr] = {game.true_root: game_true_root_old}
+        InfoSet_reverse: dict[InfoSetPtr, InfoSetPtr] = {}
+        try:
+            for l in game.node_layers:
+                for n in l:
+                    for a in n.o.child:
+                        NodePtr_reverse[n.o.child[a]] = Node_HEAP_old[NodePtr_reverse[n]].child[a]
+            for P_name in game.info_collect:
+                for obs in game.info_collect[P_name]:
+                    I = game.info_collect[P_name][obs]
+                    I_old = game_info_collect_old[P_name][obs]
+                    InfoSet_reverse[I] = I_old
+            FLAG_REVERSE_SUCCESS = True
+        except Exception as e:
+            print("Exception during reverse, no overwrite happened yet.")
+            FLAG_REVERSE_SUCCESS = False
+
+        if FLAG_REVERSE_SUCCESS:
+            try:
+                for P_name in cfR:
+                    for I in cfR[P_name]:
+                        cfR[P_name][I] = cfR_old[P_name][InfoSet_reverse[I]]
+                for P_name in sigma:
+                    for I in sigma[P_name]:
+                        sigma[P_name][I] = sigma_old[P_name][InfoSet_reverse[I]]
+                for n in pi:
+                    pi[n] = pi_old[NodePtr_reverse[n]]
+                for n in cfv:
+                    cfv[n] = cfv_old[NodePtr_reverse[n]]
+                for P_name in cfr:
+                    for I in cfr[P_name]:
+                        cfr[P_name][I] = cfr_old[P_name][InfoSet_reverse[I]]
+                for P_name in ep:
+                    for I in cfr[P_name]:
+                        ep[P_name][I] = ep_old[P_name][InfoSet_reverse[I]]
+                FLAG_TRANSCRIPT_SUCCESS = True
+            except Exception as e:
+                print("Exception during transcription, try rerun load or init a new one.")
+                FLAG_TRANSCRIPT_SUCCESS = False
+
+    for t in range(11, 21):
+        flag_print = True if t % 1 == 0 else False
         game.sync(sigma, pi, cfv, cfr, ep)
         if flag_print:
             game.print_iters(t, cfR, sigma, pi, cfv, cfr, ep)
-            key = "iter_" + str(t)
-            TIME[key] = time.time() - time_start
-            print(key, TIME[key])
+            TIME[t] = time.time() - time_start
+            print(t, TIME[t])
         game.step(cfr, cfR, sigma)
+
+    with open(os.path.join(game.DATA, "game.true_root.pkl"), "wb") as f:
+        pickle.dump(game.true_root, f)
+    with open(os.path.join(game.DATA, "Node.HEAP.pkl"), "wb") as f:
+        pickle.dump(Node.HEAP, f)
+    with open(os.path.join(game.DATA, "game.info_collect.pkl"), "wb") as f:
+        pickle.dump(game.info_collect, f)
+
+    with open(os.path.join(game.DATA, "cfR_sum.pkl"), "wb") as f:
+        pickle.dump(cfR, f)
+    with open(os.path.join(game.DATA, "sigma.pkl"), "wb") as f:
+        pickle.dump(sigma, f)
+    with open(os.path.join(game.DATA, "pi.pkl"), "wb") as f:
+        pickle.dump(pi, f)
+    with open(os.path.join(game.DATA, "cfv.pkl"), "wb") as f:
+        pickle.dump(cfv, f)
+    with open(os.path.join(game.DATA, "cfr.pkl"), "wb") as f:
+        pickle.dump(cfr, f)
+    with open(os.path.join(game.DATA, "ep.pkl"), "wb") as f:
+        pickle.dump(ep, f)
 
 
 if __name__ == "__main__":
