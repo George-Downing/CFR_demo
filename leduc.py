@@ -50,6 +50,14 @@ class Leduc(object):
     ]
 
     def __init__(self):
+        """
+        node_layers: [1, 3, 9, **24** (=27-3), 48, 120, 120, **48** --[-24+96]-> **120**, 240, 600, 600, **240**]
+
+        round1_roots: 24, round2_roots: 120 = 24*5
+
+        round1_leaves: 96 = 24*4, round2_leaves: 1080 = 24*5*(4+5)
+        """
+
         LUCK, A, B = Leduc.LUCK, Leduc.A, Leduc.B
 
         self.true_root: NodePtr = Node(NodePtr(0), act_t("CCCCCCCC")).p
@@ -59,7 +67,7 @@ class Leduc(object):
 
         self.node_layers: list[list[NodePtr]] = [[self.true_root]]
         self.info_collect: dict[player_t, dict[str, InfoSetPtr]] = {LUCK: {"": self.true_root.o.I}, A: {}, B: {}}
-        self.act_map: dict[player_t, dict[InfoSetPtr, list[act_t]]] = {LUCK: {self.true_root.o.I: act_t.cast(["J", "Q", "K"])}, A: {}, B: {}}
+        self.act: dict[player_t, dict[InfoSetPtr, list[act_t]]] = {LUCK: {self.true_root.o.I: act_t.cast(["J", "Q", "K"])}, A: {}, B: {}}
 
         self.round1_roots: list[NodePtr] = []
         self.round2_roots: list[NodePtr] = []
@@ -72,7 +80,7 @@ class Leduc(object):
         for l in range(3):
             self.node_layers.append([])
             for pa in self.node_layers[-2]:
-                for a in self.act_map[LUCK][pa.o.I]:
+                for a in self.act[LUCK][pa.o.I]:
                     ch = Node(pa, a).p
                     ch.o.parent.o.child[ch.o.branch] = ch
                     self.node_layers[-1].append(ch)
@@ -85,7 +93,7 @@ class Leduc(object):
                 self.info_collect[LUCK][I.o.observation] = I
                 self._card_num[n.o.I] = {b: self._card_num[n.o.parent.o.I][b] for b in self._card_num[n.o.parent.o.I]}
                 self._card_num[n.o.I][n.o.branch] = self._card_num[n.o.parent.o.I][n.o.branch] - 1
-                self.act_map[LUCK][n.o.I] = [b for b in self._card_num[n.o.I] if self._card_num[n.o.I][b] != 0]
+                self.act[LUCK][n.o.I] = [b for b in self._card_num[n.o.I] if self._card_num[n.o.I][b] != 0]
         for n in self.node_layers[-1]:
             self.round1_roots.append(n)
 
@@ -98,7 +106,7 @@ class Leduc(object):
                     obs = info_r + "".join(pa)
                     I = InfoSet(player_i, obs).p
                     self.info_collect[player_i][I.o.observation] = I
-                    self.act_map[player_i][I] = acts
+                    self.act[player_i][I] = acts
             self.node_layers.append([])
             for r in self.round1_roots:  # diff
                 for pa, acts in Leduc.round_template[l]:
@@ -127,7 +135,7 @@ class Leduc(object):
                     obs = info_r + "".join(pa)
                     I = InfoSet(player_i, obs).p
                     self.info_collect[player_i][I.o.observation] = I
-                    self.act_map[player_i][I] = acts
+                    self.act[player_i][I] = acts
             self.node_layers.append([])
             for r in self.round2_roots:  # diff
                 for pa, acts in Leduc.round_template[l]:
@@ -157,13 +165,7 @@ class Leduc(object):
             for h, m in Leduc.added_money:
                 self._ante[r.o(h)] = self._ante[r] + 4 * m
 
-        # node_layers: NEW: [1, 3, 9, 24=27-3, 48, 120, 120,  48 (then  24 quited, and  96 joined),  240,  600,  600,  240]
-        # node_layers: OLD: [1, 6, 30,  120,  240, 600, 600, 240 (then 120 quited, and 480 joined), 1200, 3000, 3000, 1200]
-        # many_round1_roots: NEW: 24; OLD: 120
-        # many_round2_roots: NEW: 120 = 24*5; OLD: 600 = 120*5
-        # round1_leaves: NEW: 96 = 24*4; OLD: 480 = 120*4
-        # round2_leaves: NEW: 1080 = 24*5*(4+5); OLD: 5400 = 120*5*(4+5)
-
+    def print_structures(self):
         np.set_printoptions(precision=4, suppress=True)
         with open(os.path.join(PRINT_OUT, "game.node_layers.txt"), "w") as f:
             for l in self.node_layers:
@@ -184,8 +186,8 @@ class Leduc(object):
                     print(I, ": ", self.info_collect[player_i][I], file=f, sep="")
         with open(os.path.join(PRINT_OUT, "game.act_map.txt"), "w") as f:
             for player_i in self.info_collect:
-                for I in self.act_map[player_i]:
-                    print(I, ": ", self.act_map[player_i][I], file=f, sep="")
+                for I in self.act[player_i]:
+                    print(I, ": ", self.act[player_i][I], file=f, sep="")
 
     def strategy_init(self):
         # sigma_init (SET luck + INT rand_sig)
@@ -201,18 +203,18 @@ class Leduc(object):
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
-                act = self.act_map[P_name][I]
+                act = self.act[P_name][I]
                 cfR[P_name][I] = np.zeros([len(act)], dtype=float)
 
         sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
         for obs in self.info_collect[LUCK]:
             I = self.info_collect[LUCK][obs]
-            act = self.act_map[LUCK][I]
+            act = self.act[LUCK][I]
             sigma[LUCK][I] = np.array([self._card_num[I][a] for a in act]) / sum(self._card_num[I].values())
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
-                act = self.act_map[P_name][I]
+                act = self.act[P_name][I]
                 sigma[P_name][I] = rand_sig(len(act))
 
         pi: dict[NodePtr, np.ndarray] = {}
@@ -222,7 +224,7 @@ class Leduc(object):
         pi[self.true_root] = np.array(1.0)
         for l in self.node_layers[0:3]:
             for n in l:
-                act = self.act_map[LUCK][n.o.I]
+                act = self.act[LUCK][n.o.I]
                 for i, a in enumerate(act):
                     pi[n.o.child[a]] = pi[n] * sigma[LUCK][n.o.I][i]
 
@@ -280,7 +282,7 @@ class Leduc(object):
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
-                act = self.act_map[P_name][I]
+                act = self.act[P_name][I]
                 cfr[P_name][I] = np.zeros([len(act)], dtype=float)
 
         ep: dict[player_t, dict[InfoSetPtr, float]] = {A: {}, B: {}}
@@ -289,7 +291,6 @@ class Leduc(object):
                 I = self.info_collect[P_name][obs]
                 ep[P_name][I] = 0.0
 
-        self.print_iters(0, cfR, sigma, pi, cfv, cfr, ep)
         return cfR, sigma, pi, cfv, cfr, ep
 
     def print_iters(self, t, cfR, sigma, pi, cfv, cfr, ep):
@@ -345,7 +346,7 @@ class Leduc(object):
                 for pa, act in Leduc.round_template[l]:
                     n = r.o(pa)
                     cfv[n] *= 0.0
-                    for i, a in enumerate(self.act_map[P_name][n.o.I]):
+                    for i, a in enumerate(self.act[P_name][n.o.I]):
                         cfv[n] += cfv[n.o.child[a]] * sigma[P_name][n.o.I][i]
         for r in self.round1_roots:  # parallelize THIS level
             for l in range(len(Leduc.round_template))[::-1]:
@@ -353,12 +354,12 @@ class Leduc(object):
                 for pa, act in Leduc.round_template[l]:
                     n = r.o(pa)
                     cfv[n] *= 0.0
-                    for i, a in enumerate(self.act_map[P_name][n.o.I]):
+                    for i, a in enumerate(self.act[P_name][n.o.I]):
                         cfv[n] += cfv[n.o.child[a]] * sigma[P_name][n.o.I][i]
         for l in self.node_layers[2::-1]:
             for n in l:
                 cfv[n] *= 0.0
-                for i, a in enumerate(self.act_map[LUCK][n.o.I]):
+                for i, a in enumerate(self.act[LUCK][n.o.I]):
                     cfv[n] += cfv[n.o.child[a]] * sigma[LUCK][n.o.I][i]
 
         # cfr_sync
@@ -366,7 +367,7 @@ class Leduc(object):
             for I in cfr[P_name]:
                 cfr[P_name][I] *= 0.0
                 for n in I.o:
-                    val_diff = np.array([cfv[n.o.child[a]][P_id] for a in self.act_map[P_name][I]]) - cfv[n][P_id]
+                    val_diff = np.array([cfv[n.o.child[a]][P_id] for a in self.act[P_name][I]]) - cfv[n][P_id]
                     val_diff[val_diff < 0] *= 0  # strict cfr
                     cfr[P_name][I] += pi[n] * val_diff
 
@@ -394,39 +395,28 @@ def main():
     TIME = {}
     time_start = time.time()
     TIME["start"] = time.time() - time_start
+    print("start", TIME["start"])
 
     game = Leduc()
+    game.print_structures()
     TIME["leduc"] = time.time() - time_start
+    print("leduc", TIME["leduc"])
+
     cfR, sigma, pi, cfv, cfr, ep = game.strategy_init()
-    TIME["init+disp"] = time.time() - time_start
+    game.print_iters(0, cfR, sigma, pi, cfv, cfr, ep)
+    TIME["init"] = time.time() - time_start
+    print("init", TIME["init"])
 
     # ITERATIONS:
-    for t in range(201):
-        flag_print = False
-        if t < 10:
-            if t % 1 == 0:
-                flag_print = True
-        elif t < 20:
-            if t % 2 == 0:
-                flag_print = True
-        elif t < 50:
-            if t % 5 == 0:
-                flag_print = True
-        else:
-            if t % 10 == 0:
-                flag_print = True
-
-        if flag_print:
-            print("epoch:", t)
+    for t in range(501):
+        flag_print = True if t % 20 == 0 else False
         game.sync(sigma, pi, cfv, cfr, ep)
-        TIME["sync_" + str(t)] = time.time() - time_start
         if flag_print:
             game.print_iters(t, cfR, sigma, pi, cfv, cfr, ep)
-            key = "disp_" + str(t)
-            TIME["disp_" + str(t)] = time.time() - time_start
+            key = "iter_" + str(t)
+            TIME[key] = time.time() - time_start
             print(key, TIME[key])
         game.step(cfr, cfR, sigma)
-        TIME["step_" + str(t)] = time.time() - time_start
 
 
 if __name__ == "__main__":
