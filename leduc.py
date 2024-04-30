@@ -58,6 +58,8 @@ class Leduc(object):
 
         self.PRINT = "stdout"
         self.DATA = "data"
+        self.LOGS = "logs"
+        self.PNGS = "pngs"
         print("Leduc():", os.listdir())
 
         LUCK, A, B = Leduc.LUCK, Leduc.A, Leduc.B
@@ -76,6 +78,22 @@ class Leduc(object):
 
         self._card_num: dict[InfoSetPtr, dict[act_t, int]] = {self.true_root.o.I: {act_t("J"): 2, act_t("Q"): 2, act_t("K"): 2}}
         self._ante: dict[NodePtr, np.ndarray] = {}
+
+        self.t = 0
+        self.cfrs: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        self.sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
+        self.pi: dict[NodePtr, np.ndarray] = {}
+        self.cfv: dict[NodePtr, np.ndarray] = {}
+        self.cfri: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        self.ep: dict[player_t, dict[InfoSetPtr, float]] = {A: {}, B: {}}
+
+        self.T: np.ndarray = np.zeros([16])
+        self.CFRS: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        self.SIGMA: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        self.PI: dict[NodePtr, np.ndarray] = {}
+        self.CFV: dict[NodePtr, np.ndarray] = {}
+        self.CFRI: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        self.EP: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
 
         # 0->1->2->3: player="LUCK", (EQUIVALENT to a SINGLE composite step)
         for l in range(3):
@@ -194,64 +212,64 @@ class Leduc(object):
         # sigma_init (SET luck + INT rand_sig)
         # pi_init (zero-Padding + SET luck)
         # cfv_init (zero-padding + SET leaf)
-        # cfr_init (zero-padding)
-        # cfR_init (zero-padding)
-        # exploitability (zero-padding)
+        # cfri_init (zero-padding)
+        # cfrs_init (zero-padding)
+        # ep_init (zero-padding)
 
         A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
 
-        t_ptr = [0]
+        # t_ptr = [0]
 
-        cfR: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        # cfrs: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
                 act = self.act[P_name][I]
-                cfR[P_name][I] = np.zeros([len(act)], dtype=float)
+                self.cfrs[P_name][I] = np.zeros([len(act)], dtype=float)
 
-        sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
+        # sigma: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {LUCK: {}, A: {}, B: {}}
         for obs in self.info_collect[LUCK]:
             I = self.info_collect[LUCK][obs]
             act = self.act[LUCK][I]
-            sigma[LUCK][I] = np.array([self._card_num[I][a] for a in act]) / sum(self._card_num[I].values())
+            self.sigma[LUCK][I] = np.array([self._card_num[I][a] for a in act]) / sum(self._card_num[I].values())
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
                 act = self.act[P_name][I]
-                sigma[P_name][I] = rand_sig(len(act))
+                self.sigma[P_name][I] = rand_sig(len(act))
 
-        pi: dict[NodePtr, np.ndarray] = {}
+        # pi: dict[NodePtr, np.ndarray] = {}
         for l in self.node_layers:
             for n in l:
-                pi[n] = np.array(0.0, dtype=float)
-        pi[self.true_root] = np.array(1.0)
+                self.pi[n] = np.array(0.0, dtype=float)
+        self.pi[self.true_root] = np.array(1.0)
         for l in self.node_layers[0:3]:
             for n in l:
                 act = self.act[LUCK][n.o.I]
                 for i, a in enumerate(act):
-                    pi[n.o.child[a]] = pi[n] * sigma[LUCK][n.o.I][i]
+                    self.pi[n.o.child[a]] = self.pi[n] * self.sigma[LUCK][n.o.I][i]
 
-        cfv: dict[NodePtr, np.ndarray] = {}
+        # cfv: dict[NodePtr, np.ndarray] = {}
         for l in self.node_layers:
             for n in l:
-                cfv[n] = np.array([0.0, 0.0], dtype=float)
+                self.cfv[n] = np.array([0.0, 0.0], dtype=float)
 
         # round-1, fold leaves
         for r in self.round1_roots:
             for seq in Leduc.folds_template:
                 leaf = r.o(seq)
                 if len(seq) % 2 == 1:
-                    cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
                 else:
-                    cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
         # round-2, fold leaves
         for r in self.round2_roots:
             for seq in Leduc.folds_template:
                 leaf = r.o(seq)
                 if len(seq) % 2 == 1:
-                    cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
                 else:
-                    cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
         # round-2, call leaves
         for r in self.round2_roots:
             h = r.o.h()
@@ -275,55 +293,55 @@ class Leduc(object):
             for h in Leduc.calls_template:
                 leaf = r.o(h)
                 if winner == "A":
-                    cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([1, -1]) * self._ante[leaf][1] - self._ante[leaf] * 0.05
                 elif winner == "B":
-                    cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
+                    self.cfv[leaf] = np.array([-1, 1]) * self._ante[leaf][0] - self._ante[leaf] * 0.05
                 elif winner == "/":
-                    cfv[leaf] = -self._ante[leaf] * 0.05
+                    self.cfv[leaf] = -self._ante[leaf] * 0.05
 
-        cfr: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
+        # cfri: dict[player_t, dict[InfoSetPtr, np.ndarray]] = {A: {}, B: {}}
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
                 act = self.act[P_name][I]
-                cfr[P_name][I] = np.zeros([len(act)], dtype=float)
+                self.cfri[P_name][I] = np.zeros([len(act)], dtype=float)
 
-        ep: dict[player_t, dict[InfoSetPtr, float]] = {A: {}, B: {}}
+        # ep: dict[player_t, dict[InfoSetPtr, float]] = {A: {}, B: {}}
         for P_name in [A, B]:
             for obs in self.info_collect[P_name]:
                 I = self.info_collect[P_name][obs]
-                ep[P_name][I] = 0.0
+                self.ep[P_name][I] = 0.0
 
-        return t_ptr, cfR, sigma, pi, cfv, cfr, ep
+        # return t_ptr, cfrs, sigma, pi, cfv, cfri, ep
 
-    def print_iters(self, t_ptr, cfR, sigma, pi, cfv, cfr, ep):
+    def print_iters(self):  # , t_ptr, cfrs, sigma, pi, cfv, cfri, ep):
         np.set_printoptions(precision=4, suppress=True)
-        t = t_ptr[0]
-        with open(os.path.join(self.PRINT, "cfR_sum_" + str(t) + ".txt"), "w") as f:
-            for P_name in cfR:
-                for I in cfR[P_name]:
-                    print(I, ": ", cfR[P_name][I], file=f, sep="")
+        t = self.t
+        with open(os.path.join(self.PRINT, "cfrs_" + str(t) + ".txt"), "w") as f:
+            for P_name in self.cfrs:
+                for I in self.cfrs[P_name]:
+                    print(I, ": ", self.cfrs[P_name][I], file=f, sep="")
         with open(os.path.join(self.PRINT, "sigma_" + str(t) + ".txt"), "w") as f:
-            for P_name in sigma:
-                for I in sigma[P_name]:
-                    print(I, ": ", sigma[P_name][I], file=f, sep="")
+            for P_name in self.sigma:
+                for I in self.sigma[P_name]:
+                    print(I, ": ", self.sigma[P_name][I], file=f, sep="")
         with open(os.path.join(self.PRINT, "pi_" + str(t) + ".txt"), "w") as f:
             for l in self.node_layers:
                 for n in l:
-                    print(n, pi[n], file=f)
+                    print(n, self.pi[n], file=f)
         with open(os.path.join(self.PRINT, "cfv_" + str(t) + ".txt"), "w") as f:
-            for n in cfv:
-                print(n, cfv[n], file=f)
-        with open(os.path.join(self.PRINT, "cfr_" + str(t) + ".txt"), "w") as f:
-            for P_name in cfr:
-                for I in cfr[P_name]:
-                    print(I, ": ", cfr[P_name][I], file=f, sep="")
+            for n in self.cfv:
+                print(n, self.cfv[n], file=f)
+        with open(os.path.join(self.PRINT, "cfri_" + str(t) + ".txt"), "w") as f:
+            for P_name in self.cfri:
+                for I in self.cfri[P_name]:
+                    print(I, ": ", self.cfri[P_name][I], file=f, sep="")
         with open(os.path.join(self.PRINT, "ep_" + str(t) + ".txt"), "w") as f:
-            for P_name in ep:
-                for I in ep[P_name]:
-                    print(I, ": ", ep[P_name][I], file=f, sep="")
+            for P_name in self.ep:
+                for I in self.ep[P_name]:
+                    print(I, ": ", self.ep[P_name][I], file=f, sep="")
 
-    def sync(self, sigma, pi, cfv, cfr, ep):
+    def sync(self):  # , sigma, pi, cfv, cfri, ep):
         A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
 
         # pi_sync:
@@ -333,14 +351,14 @@ class Leduc(object):
                 for r in self.round1_roots:
                     n = r.o(pa)
                     for i, a in enumerate(act):
-                        pi[n.o.child[a]] = pi[n] * sigma[P_name][n.o.I][i]
+                        self.pi[n.o.child[a]] = self.pi[n] * self.sigma[P_name][n.o.I][i]
         for l in range(len(Leduc.round_template)):
             P_name = A if l % 2 == 0 else B
             for pa, act in Leduc.round_template[l]:
                 for r in self.round2_roots:
                     n = r.o(pa)
                     for i, a in enumerate(act):
-                        pi[n.o.child[a]] = pi[n] * sigma[P_name][n.o.I][i]
+                        self.pi[n.o.child[a]] = self.pi[n] * self.sigma[P_name][n.o.I][i]
 
         # cfv_sync (non-leaf-nodes):
         # parent actively collect the cfv (not child submit onward)
@@ -349,54 +367,53 @@ class Leduc(object):
                 P_name = A if l % 2 == 0 else B
                 for pa, act in Leduc.round_template[l]:
                     n = r.o(pa)
-                    cfv[n] *= 0.0
+                    self.cfv[n] *= 0.0
                     for i, a in enumerate(self.act[P_name][n.o.I]):
-                        cfv[n] += cfv[n.o.child[a]] * sigma[P_name][n.o.I][i]
+                        self.cfv[n] += self.cfv[n.o.child[a]] * self.sigma[P_name][n.o.I][i]
         for r in self.round1_roots:  # parallelize THIS level
             for l in range(len(Leduc.round_template))[::-1]:
                 P_name = A if l % 2 == 0 else B
                 for pa, act in Leduc.round_template[l]:
                     n = r.o(pa)
-                    cfv[n] *= 0.0
+                    self.cfv[n] *= 0.0
                     for i, a in enumerate(self.act[P_name][n.o.I]):
-                        cfv[n] += cfv[n.o.child[a]] * sigma[P_name][n.o.I][i]
+                        self.cfv[n] += self.cfv[n.o.child[a]] * self.sigma[P_name][n.o.I][i]
         for l in self.node_layers[2::-1]:
             for n in l:
-                cfv[n] *= 0.0
+                self.cfv[n] *= 0.0
                 for i, a in enumerate(self.act[LUCK][n.o.I]):
-                    cfv[n] += cfv[n.o.child[a]] * sigma[LUCK][n.o.I][i]
+                    self.cfv[n] += self.cfv[n.o.child[a]] * self.sigma[LUCK][n.o.I][i]
 
         # cfr_sync
         for P_id, P_name in enumerate([A, B]):
-            for I in cfr[P_name]:
-                cfr[P_name][I] *= 0.0
+            for I in self.cfri[P_name]:
+                self.cfri[P_name][I] *= 0.0
                 for n in I.o:
-                    val_diff = np.array([cfv[n.o.child[a]][P_id] for a in self.act[P_name][I]]) - cfv[n][P_id]
+                    val_diff = np.array([self.cfv[n.o.child[a]][P_id] for a in self.act[P_name][I]]) - self.cfv[n][P_id]
                     val_diff[val_diff < 0] *= 0  # strict cfr
-                    cfr[P_name][I] += pi[n] * val_diff
+                    self.cfri[P_name][I] += self.pi[n] * val_diff
 
         # ep_sync
         for P_name in [A, B]:
-            for I in ep[P_name]:
-                ep[P_name][I] = np.max(cfr[P_name][I])
+            for I in self.ep[P_name]:
+                self.ep[P_name][I] = np.max(self.cfri[P_name][I])
 
-    @staticmethod
-    def step(cfr, t_ptr, cfR, sigma):
-        t_ptr[0] += 1
+    def step(self):
+        self.t += 1
 
         # cfR_update (accumulated version)
-        for P_name in cfR:
-            for I in cfR[P_name]:
-                cfR[P_name][I] += cfr[P_name][I]
+        for P_name in self.cfrs:
+            for I in self.cfrs[P_name]:
+                self.cfrs[P_name][I] += self.cfri[P_name][I]
 
         # sigma_sync
-        for P_name in cfR:
-            for I in cfR[P_name]:
-                norm = cfR[P_name][I].sum()
+        for P_name in self.cfrs:
+            for I in self.cfrs[P_name]:
+                norm = self.cfrs[P_name][I].sum()
                 if norm > 0:
-                    sigma[P_name][I] = cfR[P_name][I] / norm
+                    self.sigma[P_name][I] = self.cfrs[P_name][I] / norm
 
-    def save(self, t_ptr, cfR, sigma, pi, cfv, cfr, ep):
+    def save(self):
         with open(os.path.join(self.DATA, "game.true_root.pkl"), "wb") as f:
             pickle.dump(self.true_root, f)
         with open(os.path.join(self.DATA, "Node.HEAP.pkl"), "wb") as f:
@@ -404,22 +421,37 @@ class Leduc(object):
         with open(os.path.join(self.DATA, "game.info_collect.pkl"), "wb") as f:
             pickle.dump(self.info_collect, f)
 
-        with open(os.path.join(self.DATA, "t_ptr.pkl"), "wb") as f:
-            pickle.dump(t_ptr, f)
-        with open(os.path.join(self.DATA, "cfR_sum.pkl"), "wb") as f:
-            pickle.dump(cfR, f)
+        with open(os.path.join(self.DATA, "t.pkl"), "wb") as f:
+            pickle.dump(self.t, f)
+        with open(os.path.join(self.DATA, "cfrs.pkl"), "wb") as f:
+            pickle.dump(self.cfrs, f)
         with open(os.path.join(self.DATA, "sigma.pkl"), "wb") as f:
-            pickle.dump(sigma, f)
+            pickle.dump(self.sigma, f)
         with open(os.path.join(self.DATA, "pi.pkl"), "wb") as f:
-            pickle.dump(pi, f)
+            pickle.dump(self.pi, f)
         with open(os.path.join(self.DATA, "cfv.pkl"), "wb") as f:
-            pickle.dump(cfv, f)
-        with open(os.path.join(self.DATA, "cfr.pkl"), "wb") as f:
-            pickle.dump(cfr, f)
+            pickle.dump(self.cfv, f)
+        with open(os.path.join(self.DATA, "cfri.pkl"), "wb") as f:
+            pickle.dump(self.cfri, f)
         with open(os.path.join(self.DATA, "ep.pkl"), "wb") as f:
-            pickle.dump(ep, f)
+            pickle.dump(self.ep, f)
 
-    def load(self, t_ptr, cfR, sigma, pi, cfv, cfr, ep):
+        with open(os.path.join(self.LOGS, "T.pkl"), "wb") as f:
+            pickle.dump(self.T, f)
+        with open(os.path.join(self.LOGS, "CFRS.pkl"), "wb") as f:
+            pickle.dump(self.CFRS, f)
+        with open(os.path.join(self.LOGS, "SIGMA.pkl"), "wb") as f:
+            pickle.dump(self.SIGMA, f)
+        with open(os.path.join(self.LOGS, "PI.pkl"), "wb") as f:
+            pickle.dump(self.PI, f)
+        with open(os.path.join(self.LOGS, "CFV.pkl"), "wb") as f:
+            pickle.dump(self.CFV, f)
+        with open(os.path.join(self.LOGS, "CFRI.pkl"), "wb") as f:
+            pickle.dump(self.CFRI, f)
+        with open(os.path.join(self.LOGS, "EP.pkl"), "wb") as f:
+            pickle.dump(self.EP, f)
+
+    def load(self):
         with open(os.path.join(self.DATA, "game.true_root.pkl"), "rb") as f:
             game_true_root_old: NodePtr = pickle.load(f)
         with open(os.path.join(self.DATA, "Node.HEAP.pkl"), "rb") as f:
@@ -427,23 +459,40 @@ class Leduc(object):
         with open(os.path.join(self.DATA, "game.info_collect.pkl"), "rb") as f:
             game_info_collect_old: dict[player_t, dict[str, InfoSetPtr]] = pickle.load(f)
 
-        with open(os.path.join(self.DATA, "t_ptr.pkl"), "rb") as f:
-            t_ptr_old: list[int] = pickle.load(f)
-        with open(os.path.join(self.DATA, "cfR_sum.pkl"), "rb") as f:
-            cfR_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+        with open(os.path.join(self.DATA, "t.pkl"), "rb") as f:
+            t_old: int = pickle.load(f)
+        with open(os.path.join(self.DATA, "cfrs.pkl"), "rb") as f:
+            cfrs_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
         with open(os.path.join(self.DATA, "sigma.pkl"), "rb") as f:
             sigma_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
         with open(os.path.join(self.DATA, "pi.pkl"), "rb") as f:
             pi_old: dict[NodePtr, np.ndarray] = pickle.load(f)
         with open(os.path.join(self.DATA, "cfv.pkl"), "rb") as f:
             cfv_old: dict[NodePtr, np.ndarray] = pickle.load(f)
-        with open(os.path.join(self.DATA, "cfr.pkl"), "rb") as f:
-            cfr_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+        with open(os.path.join(self.DATA, "cfri.pkl"), "rb") as f:
+            cfri_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
         with open(os.path.join(self.DATA, "ep.pkl"), "rb") as f:
             ep_old: dict[player_t, dict[InfoSetPtr, float]] = pickle.load(f)
 
-        NodePtr_reverse: dict[NodePtr, NodePtr] = {self.true_root: game_true_root_old}
+        with open(os.path.join(self.LOGS, "T.pkl"), "rb") as f:
+            T_old: np.ndarray = pickle.load(f)
+        with open(os.path.join(self.LOGS, "CFRS.pkl"), "rb") as f:
+            CFRS_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+        with open(os.path.join(self.LOGS, "SIGMA.pkl"), "rb") as f:
+            SIGMA_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+        with open(os.path.join(self.LOGS, "PI.pkl"), "rb") as f:
+            PI_old: dict[NodePtr, np.ndarray] = pickle.load(f)
+        with open(os.path.join(self.LOGS, "CFV.pkl"), "rb") as f:
+            CFV_old: dict[NodePtr, np.ndarray] = pickle.load(f)
+        with open(os.path.join(self.LOGS, "CFRI.pkl"), "rb") as f:
+            CFRI_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+        with open(os.path.join(self.LOGS, "EP.pkl"), "rb") as f:
+            EP_old: dict[player_t, dict[InfoSetPtr, np.ndarray]] = pickle.load(f)
+
+        NodePtr_reverse: dict[NodePtr, NodePtr] = {}
         InfoSet_reverse: dict[InfoSetPtr, InfoSetPtr] = {}
+
+        NodePtr_reverse[self.true_root] = game_true_root_old
         for l in self.node_layers:
             for n in l:
                 for a in n.o.child:
@@ -452,58 +501,179 @@ class Leduc(object):
             for obs in self.info_collect[P_name]:
                 InfoSet_reverse[self.info_collect[P_name][obs]] = game_info_collect_old[P_name][obs]
 
-        t_ptr[0] = t_ptr_old[0]
-        for P_name in cfR:
-            for I in cfR[P_name]:
-                cfR[P_name][I] = cfR_old[P_name][InfoSet_reverse[I]]
-        for P_name in sigma:
-            for I in sigma[P_name]:
-                sigma[P_name][I] = sigma_old[P_name][InfoSet_reverse[I]]
-        for n in pi:
-            pi[n] = pi_old[NodePtr_reverse[n]]
-        for n in cfv:
-            cfv[n] = cfv_old[NodePtr_reverse[n]]
-        for P_name in cfr:
-            for I in cfr[P_name]:
-                cfr[P_name][I] = cfr_old[P_name][InfoSet_reverse[I]]
-        for P_name in ep:
-            for I in cfr[P_name]:
-                ep[P_name][I] = ep_old[P_name][InfoSet_reverse[I]]
+        self.t = t_old
+        for P_name in self.cfrs:
+            for I in self.cfrs[P_name]:
+                self.cfrs[P_name][I] = cfrs_old[P_name][InfoSet_reverse[I]]
+        for P_name in self.sigma:
+            for I in self.sigma[P_name]:
+                self.sigma[P_name][I] = sigma_old[P_name][InfoSet_reverse[I]]
+        for n in self.pi:
+            self.pi[n] = pi_old[NodePtr_reverse[n]]
+        for n in self.cfv:
+            self.cfv[n] = cfv_old[NodePtr_reverse[n]]
+        for P_name in self.cfri:
+            for I in self.cfri[P_name]:
+                self.cfri[P_name][I] = cfri_old[P_name][InfoSet_reverse[I]]
+        for P_name in self.ep:
+            for I in self.cfri[P_name]:
+                self.ep[P_name][I] = ep_old[P_name][InfoSet_reverse[I]]
+
+        L = len(T_old)
+        if L <= len(self.T):
+            self.T[0:L] = T_old[0:L]
+            for P_name in self.CFRS:
+                for I in self.CFRS[P_name]:
+                    self.CFRS[P_name][I][:, 0:L] = CFRS_old[P_name][InfoSet_reverse[I]][:, 0:L]
+            for P_name in self.SIGMA:
+                for I in self.SIGMA[P_name]:
+                    self.SIGMA[P_name][I][:, 0:L] = SIGMA_old[P_name][InfoSet_reverse[I]][:, 0:L]
+            for n in self.PI:
+                self.PI[n][0:L] = PI_old[NodePtr_reverse[n]][0:L]
+            for n in self.CFV:
+                self.CFV[n][:, 0:L] = CFV_old[NodePtr_reverse[n]][:, 0:L]
+            for P_name in self.CFRI:
+                for I in self.CFRI[P_name]:
+                    self.CFRI[P_name][I][:, 0:L] = CFRI_old[P_name][InfoSet_reverse[I]][:, 0:L]
+            for P_name in self.EP:
+                for I in self.cfri[P_name]:
+                    self.EP[P_name][I][0:L] = EP_old[P_name][InfoSet_reverse[I]][0:L]
+        else:
+            # this usually occurs when after save then load, but t_MAX was prescribed even smaller than self.t
+            # in this situation, t_MAX is treated as if it is exactly self.t, 0 iterations will occur
+            self.T = T_old
+            for P_name in self.CFRS:
+                for I in self.CFRS[P_name]:
+                    self.CFRS[P_name][I] = CFRS_old[P_name][InfoSet_reverse[I]]
+            for P_name in self.SIGMA:
+                for I in self.SIGMA[P_name]:
+                    self.SIGMA[P_name][I] = SIGMA_old[P_name][InfoSet_reverse[I]]
+            for n in self.PI:
+                self.PI[n] = PI_old[NodePtr_reverse[n]]
+            for n in self.CFV:
+                self.CFV[n] = CFV_old[NodePtr_reverse[n]]
+            for P_name in self.CFRI:
+                for I in self.CFRI[P_name]:
+                    self.CFRI[P_name][I] = CFRI_old[P_name][InfoSet_reverse[I]]
+            for P_name in self.EP:
+                for I in self.cfri[P_name]:
+                    self.EP[P_name][I] = EP_old[P_name][InfoSet_reverse[I]]
+        return L
+
+    @staticmethod
+    def box_dt(t):
+        box, dt = 32, 1
+        while box <= t:
+            box, dt = box * 2, dt * 2
+        return box, dt
+
+    def rec_init(self, t, t_MAX):
+        box, dt = self.box_dt(t)
+        T = np.arange(int(np.ceil(t / dt)) * dt, min(box, t_MAX), dt)
+
+        while box <= t_MAX:
+            box_old = box
+            box, dt = box * 2, dt * 2
+            T = np.concatenate([T, np.arange(box_old, min(box, t_MAX), dt)], 0)
+
+    def logs_init(self, t_MAX):
+        A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
+
+        self.T = np.arange(0, t_MAX, 5)
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                act = self.act[P_name][I]
+                self.CFRS[P_name][I] = np.zeros([len(act), len(self.T)], dtype=float)
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                act = self.act[P_name][I]
+                self.SIGMA[P_name][I] = np.zeros([len(act), len(self.T)])
+
+        for l in self.node_layers:
+            for n in l:
+                self.PI[n] = np.zeros([len(self.T)], dtype=float)
+
+        for l in self.node_layers:
+            for n in l:
+                self.CFV[n] = np.zeros([2, len(self.T)], dtype=float)
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                act = self.act[P_name][I]
+                self.CFRI[P_name][I] = np.zeros([len(act), len(self.T)], dtype=float)
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                self.EP[P_name][I] = np.zeros([len(self.T)])
+
+        return 0  # 0 is for new instance and no load, 0 is t_idx at here
+
+    def logs_rec(self, t_idx):
+        A, B, LUCK = Leduc.A, Leduc.B, Leduc.LUCK
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                self.CFRS[P_name][I][:, t_idx] = self.cfrs[P_name][I]
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                self.SIGMA[P_name][I][:, t_idx] = self.sigma[P_name][I]
+
+        for l in self.node_layers:
+            for n in l:
+                self.PI[n][t_idx] = self.pi[n]
+
+        for l in self.node_layers:
+            for n in l:
+                self.CFV[n][:, t_idx] = self.cfv[n]
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                self.CFRI[P_name][I][:, t_idx] = self.cfri[P_name][I]
+
+        for P_name in [A, B]:
+            for obs in self.info_collect[P_name]:
+                I = self.info_collect[P_name][obs]
+                self.EP[P_name][I][t_idx] = self.ep[P_name][I]
 
 
 def main():
     game = Leduc()
     game.print_structures()
 
-    t_ptr, cfR, sigma, pi, cfv, cfr, ep = game.iters_init()
-    # game.load(t_ptr, cfR, sigma, pi, cfv, cfr, ep)
-
-    T_MAX = 50
-    box, dt = 16, 1
-    while t_ptr[0] >= box:
-        box, dt = box*2, dt*2
-    TIMEs_0 = int(np.ceil(t_ptr[0] / dt)) * dt
-    TIMEs = np.arange(TIMEs_0, min(box, T_MAX), dt)
+    game.iters_init()
+    t_MAX = 600
+    t_idx = game.logs_init(t_MAX)
+    t_idx = game.load()
 
     time_start = time.time()
-    while True:
-        game.sync(sigma, pi, cfv, cfr, ep)
+    while game.t < t_MAX:
+        game.sync()
+        if game.t % 5 == 0:
+            game.logs_rec(t_idx)
+            t_idx += 1
+            if game.t % 20 == 0:
+                print(game.t, time.time() - time_start)
+        game.step()
+    game.save()
 
-        if t_ptr[0] % dt == 0:
-            print(t_ptr[0], time.time() - time_start)
-            game.save(t_ptr, cfR, sigma, pi, cfv, cfr, ep)
+    # plot the curves
+    # plot CFRS, SIGMA, CFRI, EP, dtype: np.array[P_name][I], total=288
+    # plot pi, cfv, dtype: np.array[node], np.array[node][P_idx], total=10237 if full plotted
 
-            if t_ptr[0] >= box:
-                box, dt = box * 2, dt * 2
-        if t_ptr[0] < T_MAX:
-            game.step(cfr, t_ptr, cfR, sigma)
-        else:
-            game.print_iters(t_ptr, cfR, sigma, pi, cfv, cfr, ep)
-            game.save(t_ptr, cfR, sigma, pi, cfv, cfr, ep)
-            break
 
 
 if __name__ == "__main__":
     # FLAG_PRINT = True if t_ptr[0] % 1 == 0 else False
     # if FLAG_PRINT:
     main()
+
